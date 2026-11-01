@@ -1,0 +1,106 @@
+[
+  {
+    "id": "c0ffee0000000001",
+    "type": "comment",
+    "name": "Text yourself when something fails",
+    "info": "1. Open the **SMSTunnel account** config node and paste your API key (SMSTunnel dashboard: **Apps → Add an app**).\n2. Set the environment variable `SMSTUNNEL_ALERT_TO` to your number in international format (+14155550123), or type the number in **To** of the send node.\n3. Click the inject button: the function reports an error, the Catch node gets it, and your phone texts you.\n\nPoint the Catch node at the nodes you want to watch, and keep the SMSTunnel send node out of its scope.",
+    "x": 210,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "c0ffee0000000002",
+    "type": "inject",
+    "name": "Try it",
+    "props": [{ "p": "payload" }],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "nightly backup",
+    "payloadType": "str",
+    "x": 130,
+    "y": 120,
+    "wires": [["c0ffee0000000003"]]
+  },
+  {
+    "id": "c0ffee0000000003",
+    "type": "function",
+    "name": "Something that can fail",
+    "func": "node.error(`The ${msg.payload} did not finish`, msg);\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 330,
+    "y": 120,
+    "wires": [[]]
+  },
+  {
+    "id": "c0ffee0000000004",
+    "type": "catch",
+    "name": "Errors from the watched nodes",
+    "scope": ["c0ffee0000000003"],
+    "uncaught": false,
+    "x": 190,
+    "y": 200,
+    "wires": [["c0ffee0000000005"]]
+  },
+  {
+    "id": "c0ffee0000000005",
+    "type": "change",
+    "name": "The text",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "\"Node-RED: \" & error.message",
+        "tot": "jsonata"
+      }
+    ],
+    "x": 410,
+    "y": 200,
+    "wires": [["c0ffee0000000006"]]
+  },
+  {
+    "id": "c0ffee0000000006",
+    "type": "smstunnel-send",
+    "name": "Text me",
+    "account": "c0ffee00000000aa",
+    "to": "SMSTUNNEL_ALERT_TO",
+    "toType": "env",
+    "message": "payload",
+    "messageType": "msg",
+    "deviceId": "",
+    "wait": false,
+    "x": 580,
+    "y": 200,
+    "wires": [["c0ffee0000000007"]]
+  },
+  {
+    "id": "c0ffee0000000007",
+    "type": "debug",
+    "name": "Sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 750,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "c0ffee00000000aa",
+    "type": "smstunnel-account",
+    "name": "My SMSTunnel account",
+    "deviceId": "",
+    "defaultCountryCode": "",
+    "serverUrl": ""
+  }
+]

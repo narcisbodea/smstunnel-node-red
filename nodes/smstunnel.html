@@ -1,0 +1,214 @@
+<script type="text/javascript">
+  (function () {
+    const COLOR = '#A7B3DF';
+    const SOURCES = ['msg', 'flow', 'global', 'str', 'env', 'jsonata'];
+
+    function countryCodeIsValid(value) {
+      if (!value) return true;
+      return /^(\+|00)?[1-9]\d{0,3}$/.test(String(value).replace(/[\s\-().]/g, ''));
+    }
+
+    RED.nodes.registerType('smstunnel-account', {
+      category: 'config',
+      defaults: {
+        name: { value: '' },
+        deviceId: { value: '' },
+        defaultCountryCode: { value: '', validate: countryCodeIsValid },
+        // No field for it: only for a self-hosted SMSTunnel or a test server, set in the flow's JSON.
+        serverUrl: { value: '' },
+      },
+      credentials: {
+        apiKey: { type: 'password', required: true },
+      },
+      label: function () {
+        return this.name || this._('smstunnel.paletteLabel.account');
+      },
+    });
+
+    function senderDefinition(kind) {
+      return {
+        category: 'SMSTunnel',
+        color: COLOR,
+        defaults: {
+          name: { value: '' },
+          account: { value: '', type: 'smstunnel-account', required: true },
+          to: { value: 'to', validate: RED.validators.typedInput('toType') },
+          toType: { value: 'msg' },
+          message: { value: 'payload', validate: RED.validators.typedInput('messageType') },
+          messageType: { value: 'msg' },
+          deviceId: { value: '' },
+          wait: { value: false },
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: 'smstunnel.svg',
+        paletteLabel: function () {
+          return this._('smstunnel.paletteLabel.' + kind);
+        },
+        label: function () {
+          return this.name || (kind === 'code' ? 'SMSTunnel code' : 'SMSTunnel send');
+        },
+        labelStyle: function () {
+          return this.name ? 'node_label_italic' : '';
+        },
+        oneditprepare: function () {
+          $('#node-input-to').typedInput({ default: 'msg', typeField: '#node-input-toType', types: SOURCES });
+          $('#node-input-message').typedInput({
+            default: 'msg',
+            typeField: '#node-input-messageType',
+            types: SOURCES,
+          });
+        },
+      };
+    }
+
+    RED.nodes.registerType('smstunnel-send', senderDefinition('send'));
+    RED.nodes.registerType('smstunnel-code', senderDefinition('code'));
+
+    RED.nodes.registerType('smstunnel-received', {
+      category: 'SMSTunnel',
+      color: COLOR,
+      defaults: {
+        name: { value: '' },
+        account: { value: '', type: 'smstunnel-account', required: true },
+        interval: {
+          value: 60,
+          required: true,
+          validate: function (value) {
+            return Number(value) >= 10;
+          },
+        },
+        deviceId: { value: '' },
+        phone: { value: '' },
+        startWith: { value: 'new' },
+      },
+      inputs: 1,
+      outputs: 1,
+      icon: 'smstunnel.svg',
+      paletteLabel: function () {
+        return this._('smstunnel.paletteLabel.received');
+      },
+      label: function () {
+        return this.name || 'SMSTunnel received';
+      },
+      labelStyle: function () {
+        return this.name ? 'node_label_italic' : '';
+      },
+    });
+  })();
+</script>
+
+<script type="text/html" data-template-name="smstunnel-account">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> <span data-i18n="smstunnel.label.name"></span></label>
+    <input type="text" id="node-config-input-name" data-i18n="[placeholder]smstunnel.placeholder.accountName" />
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-apiKey"><i class="fa fa-key"></i> <span data-i18n="smstunnel.label.apiKey"></span></label>
+    <input type="password" id="node-config-input-apiKey" placeholder="sk_live_…" autocomplete="off" />
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-deviceId"><i class="fa fa-mobile"></i> <span data-i18n="smstunnel.label.deviceId"></span></label>
+    <input type="text" id="node-config-input-deviceId" data-i18n="[placeholder]smstunnel.placeholder.deviceIdAccount" />
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-defaultCountryCode"><i class="fa fa-globe"></i> <span data-i18n="smstunnel.label.countryCode"></span></label>
+    <input type="text" id="node-config-input-defaultCountryCode" data-i18n="[placeholder]smstunnel.placeholder.countryCode" />
+  </div>
+  <div class="form-tips" data-i18n="[html]smstunnel.tip.account"></div>
+  <div class="form-tips" style="margin-top: 8px" data-i18n="[html]smstunnel.tip.countryCode"></div>
+</script>
+
+<script type="text/html" data-template-name="smstunnel-send">
+  <div class="form-row">
+    <label for="node-input-account"><i class="fa fa-user"></i> <span data-i18n="smstunnel.label.account"></span></label>
+    <input type="text" id="node-input-account" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-to"><i class="fa fa-phone"></i> <span data-i18n="smstunnel.label.to"></span></label>
+    <input type="text" id="node-input-to" style="width: 70%" />
+    <input type="hidden" id="node-input-toType" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-message"><i class="fa fa-comment"></i> <span data-i18n="smstunnel.label.message"></span></label>
+    <input type="text" id="node-input-message" style="width: 70%" />
+    <input type="hidden" id="node-input-messageType" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-deviceId"><i class="fa fa-mobile"></i> <span data-i18n="smstunnel.label.deviceId"></span></label>
+    <input type="text" id="node-input-deviceId" data-i18n="[placeholder]smstunnel.placeholder.deviceIdNode" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-wait"><i class="fa fa-clock-o"></i> <span data-i18n="smstunnel.label.wait"></span></label>
+    <input type="checkbox" id="node-input-wait" style="display: inline-block; width: auto; vertical-align: top" />
+    <label for="node-input-wait" style="width: 70%" data-i18n="smstunnel.option.wait"></label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> <span data-i18n="smstunnel.label.name"></span></label>
+    <input type="text" id="node-input-name" />
+  </div>
+  <div class="form-tips" data-i18n="[html]smstunnel.tip.send"></div>
+</script>
+
+<script type="text/html" data-template-name="smstunnel-code">
+  <div class="form-row">
+    <label for="node-input-account"><i class="fa fa-user"></i> <span data-i18n="smstunnel.label.account"></span></label>
+    <input type="text" id="node-input-account" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-to"><i class="fa fa-phone"></i> <span data-i18n="smstunnel.label.to"></span></label>
+    <input type="text" id="node-input-to" style="width: 70%" />
+    <input type="hidden" id="node-input-toType" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-message"><i class="fa fa-comment"></i> <span data-i18n="smstunnel.label.message"></span></label>
+    <input type="text" id="node-input-message" style="width: 70%" />
+    <input type="hidden" id="node-input-messageType" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-deviceId"><i class="fa fa-mobile"></i> <span data-i18n="smstunnel.label.deviceId"></span></label>
+    <input type="text" id="node-input-deviceId" data-i18n="[placeholder]smstunnel.placeholder.deviceIdNode" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-wait"><i class="fa fa-clock-o"></i> <span data-i18n="smstunnel.label.wait"></span></label>
+    <input type="checkbox" id="node-input-wait" style="display: inline-block; width: auto; vertical-align: top" />
+    <label for="node-input-wait" style="width: 70%" data-i18n="smstunnel.option.wait"></label>
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> <span data-i18n="smstunnel.label.name"></span></label>
+    <input type="text" id="node-input-name" />
+  </div>
+  <div class="form-tips" data-i18n="[html]smstunnel.tip.code"></div>
+</script>
+
+<script type="text/html" data-template-name="smstunnel-received">
+  <div class="form-row">
+    <label for="node-input-account"><i class="fa fa-user"></i> <span data-i18n="smstunnel.label.account"></span></label>
+    <input type="text" id="node-input-account" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-interval"><i class="fa fa-repeat"></i> <span data-i18n="smstunnel.label.interval"></span></label>
+    <input type="number" id="node-input-interval" min="10" step="1" style="width: 90px" />
+    <span data-i18n="smstunnel.label.seconds"></span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-deviceId"><i class="fa fa-mobile"></i> <span data-i18n="smstunnel.label.deviceId"></span></label>
+    <input type="text" id="node-input-deviceId" data-i18n="[placeholder]smstunnel.placeholder.deviceIdReceived" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-phone"><i class="fa fa-phone"></i> <span data-i18n="smstunnel.label.from"></span></label>
+    <input type="text" id="node-input-phone" data-i18n="[placeholder]smstunnel.placeholder.from" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-startWith"><i class="fa fa-play"></i> <span data-i18n="smstunnel.label.startWith"></span></label>
+    <select id="node-input-startWith" style="width: 70%">
+      <option value="new" data-i18n="smstunnel.option.startNew"></option>
+      <option value="latest" data-i18n="smstunnel.option.startLatest"></option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> <span data-i18n="smstunnel.label.name"></span></label>
+    <input type="text" id="node-input-name" />
+  </div>
+  <div class="form-tips" data-i18n="[html]smstunnel.tip.received"></div>
+</script>

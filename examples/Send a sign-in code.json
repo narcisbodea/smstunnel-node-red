@@ -1,0 +1,79 @@
+[
+  {
+    "id": "c0de000000000001",
+    "type": "comment",
+    "name": "Send a sign-in code",
+    "info": "1. Open the **SMSTunnel account** config node and paste your API key (SMSTunnel dashboard: **Apps → Add an app**).\n2. In the inject node, put the number to text in international format.\n3. Click the inject button. The function makes a 6-digit code with `crypto.randomInt`, keeps it in flow context for 10 minutes, and SMSTunnel code texts it.\n\nIn a real sign-in, the number comes from your login form, and you compare what the person types with the stored code, on the server.",
+    "x": 170,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "c0de000000000002",
+    "type": "inject",
+    "name": "Sign in +14155550123",
+    "props": [{ "p": "payload" }],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "{\"phone\":\"+14155550123\"}",
+    "payloadType": "json",
+    "x": 170,
+    "y": 120,
+    "wires": [["c0de000000000003"]]
+  },
+  {
+    "id": "c0de000000000003",
+    "type": "function",
+    "name": "Make a code",
+    "func": "const phone = msg.payload.phone;\nconst code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');\n\n// Keep it on the server, with an expiry, to compare with what the person types.\nflow.set(`signin:${phone}`, { code, expires: Date.now() + 10 * 60 * 1000 });\n\nmsg.to = phone;\nmsg.payload = `Your sign-in code is ${code}. It expires in 10 minutes.`;\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [{ "var": "crypto", "module": "crypto" }],
+    "x": 390,
+    "y": 120,
+    "wires": [["c0de000000000004"]]
+  },
+  {
+    "id": "c0de000000000004",
+    "type": "smstunnel-code",
+    "name": "",
+    "account": "c0de0000000000aa",
+    "to": "to",
+    "toType": "msg",
+    "message": "payload",
+    "messageType": "msg",
+    "deviceId": "",
+    "wait": false,
+    "x": 570,
+    "y": 120,
+    "wires": [["c0de000000000005"]]
+  },
+  {
+    "id": "c0de000000000005",
+    "type": "debug",
+    "name": "Code sent",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 750,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "c0de0000000000aa",
+    "type": "smstunnel-account",
+    "name": "My SMSTunnel account",
+    "deviceId": "",
+    "defaultCountryCode": "",
+    "serverUrl": ""
+  }
+]

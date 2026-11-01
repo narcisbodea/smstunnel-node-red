@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+.env
+*.key.json
+local-test-key.json
+.nyc_output/
+coverage/

@@ -1,0 +1,93 @@
+[
+  {
+    "id": "a115000000000001",
+    "type": "comment",
+    "name": "Answer a text about opening hours",
+    "info": "1. Open the **SMSTunnel account** config node and paste an API key that may read received texts (**Can also read received texts** when you create it in the SMSTunnel dashboard, under **Apps**).\n2. Turn on syncing of received texts in the SMSTunnel app.\n3. Deploy. When someone texts your phone a message with \"hours\" or \"open\" in it, the flow answers from your own number.",
+    "x": 200,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "a115000000000002",
+    "type": "smstunnel-received",
+    "name": "",
+    "account": "a1150000000000aa",
+    "interval": 60,
+    "deviceId": "",
+    "phone": "",
+    "startWith": "new",
+    "x": 170,
+    "y": 140,
+    "wires": [["a115000000000003", "a115000000000006"]]
+  },
+  {
+    "id": "a115000000000003",
+    "type": "switch",
+    "name": "Asks about hours?",
+    "property": "payload",
+    "propertyType": "msg",
+    "rules": [{ "t": "regex", "v": "\\b(hours|open)\\b", "vt": "str", "case": true }],
+    "checkall": "true",
+    "repair": false,
+    "outputs": 1,
+    "x": 390,
+    "y": 140,
+    "wires": [["a115000000000004"]]
+  },
+  {
+    "id": "a115000000000004",
+    "type": "change",
+    "name": "The answer",
+    "rules": [
+      { "t": "set", "p": "to", "pt": "msg", "to": "from", "tot": "msg" },
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "We're open Monday to Friday, 9:00 to 18:00.",
+        "tot": "str"
+      }
+    ],
+    "x": 580,
+    "y": 140,
+    "wires": [["a115000000000005"]]
+  },
+  {
+    "id": "a115000000000005",
+    "type": "smstunnel-send",
+    "name": "Answer",
+    "account": "a1150000000000aa",
+    "to": "to",
+    "toType": "msg",
+    "message": "payload",
+    "messageType": "msg",
+    "deviceId": "",
+    "wait": false,
+    "x": 750,
+    "y": 140,
+    "wires": [[]]
+  },
+  {
+    "id": "a115000000000006",
+    "type": "debug",
+    "name": "Every received text",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "x": 400,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "a1150000000000aa",
+    "type": "smstunnel-account",
+    "name": "My SMSTunnel account",
+    "deviceId": "",
+    "defaultCountryCode": "",
+    "serverUrl": ""
+  }
+]

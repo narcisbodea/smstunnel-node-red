@@ -1,0 +1,57 @@
+{
+  "name": "@narcisbodea/smstunnel-node-red",
+  "version": "1.0.0",
+  "description": "Node-RED nodes for SMSTunnel: send texts and sign-in codes from your own Android phone, from your own number, and get the texts it receives.",
+  "keywords": [
+    "node-red",
+    "smstunnel",
+    "sms",
+    "text message",
+    "android",
+    "verification code",
+    "2fa",
+    "otp"
+  ],
+  "homepage": "https://github.com/narcisbodea/smstunnel-node-red#readme",
+  "bugs": {
+    "url": "https://github.com/narcisbodea/smstunnel-node-red/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/narcisbodea/smstunnel-node-red.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Narcis Bodea",
+    "email": "contact@narboweb.ro",
+    "url": "https://smstunnel.io"
+  },
+  "files": [
+    "nodes",
+    "examples",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "node-red": {
+    "version": ">=3.1.0",
+    "nodes": {
+      "smstunnel": "nodes/smstunnel.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "mocha \"test/*_spec.js\"",
+    "test:e2e": "mocha --timeout 120000 \"test/e2e/*_spec.js\"",
+    "test:runtime": "node test/e2e/run-node-red.js"
+  },
+  "devDependencies": {
+    "mocha": "^12.0.3",
+    "node-red": "^5.0.9",
+    "node-red-node-test-helper": "^0.3.6",
+    "should": "^13.2.3"
+  }
+}

@@ -1,0 +1,146 @@
+<script type="text/html" data-help-name="smstunnel-account">
+  <p>Your SMSTunnel account: the API key the SMSTunnel nodes use to send texts from your own Android phone, from your own number.</p>
+  <h3>Properties</h3>
+  <dl class="message-properties">
+    <dt>API key <span class="property-type">string</span></dt>
+    <dd>
+      Create it in your <a href="https://dashboard.smstunnel.io/apps" target="_blank" rel="noopener">SMSTunnel dashboard</a> under
+      <b>Apps → Add an app</b>. Node-RED keeps it with your other credentials, encrypted, never in the flow itself.
+    </dd>
+    <dt class="optional">Phone ID <span class="property-type">string</span></dt>
+    <dd>
+      The phone to send from, when the account has several. It is under <b>Phones</b> in the dashboard, with a Copy button.
+      Empty: SMSTunnel picks one of your phones.
+    </dd>
+    <dt class="optional">Country code <span class="property-type">string</span></dt>
+    <dd>
+      Such as <code>+40</code>. It completes numbers written without <code>+</code> or <code>00</code>
+      (<code>0712 345 678</code> becomes <code>+40712345678</code>). Numbers in international format need nothing.
+    </dd>
+  </dl>
+  <h3>Details</h3>
+  <p>
+    Your phone needs the <a href="https://play.google.com/store/apps/details?id=io.smstunnel.app" target="_blank" rel="noopener">SMSTunnel app from Google Play</a>,
+    signed in to the same account. A new key can send texts and look up their status. Reading received texts is a separate
+    opt-in for each key (<b>Can also read received texts</b>).
+  </p>
+  <p>To cut Node-RED off, delete its key in the dashboard.</p>
+</script>
+
+<script type="text/html" data-help-name="smstunnel-send">
+  <p>Sends a text from your own Android phone, from your own number, through your SMSTunnel account.</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">string</span></dt>
+    <dd>The text, up to 1600 characters. <b>Text</b> in the node can take it from elsewhere.</dd>
+    <dt>to <span class="property-type">string | array</span></dt>
+    <dd>
+      The number in international format, such as <code>"+14155550123"</code>. Several numbers (separated by commas or new
+      lines, or an array) get one text each, at most 30 per message. <b>To</b> in the node can take it from elsewhere.
+      A number must be text: as a JavaScript number it loses its <code>+</code>, so it is refused.
+    </dd>
+    <dt class="optional">deviceId <span class="property-type">string</span></dt>
+    <dd>Sends through this phone instead of the one set in the node or the account.</dd>
+    <dt class="optional">defaultCountryCode <span class="property-type">string</span></dt>
+    <dd>Such as <code>"+40"</code>: completes numbers written without <code>+</code> or <code>00</code>, instead of the account's.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <p>One message for each text, with <code>msg.to</code> set to its number.</p>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>
+      <ul>
+        <li><code>messageId</code>: SMSTunnel's id for the text.</li>
+        <li><code>to</code> and <code>message</code>.</li>
+        <li>
+          <code>status</code>: <code>queued</code> when the phone is offline (it sends the text as soon as it is back),
+          otherwise <code>pending</code>. With <b>Wait</b>: <code>sent</code>, <code>delivered</code>, <code>failed</code> or
+          <code>unconfirmed</code> (handed to the SIM, no confirmation), with <code>sentAt</code> and <code>errorMessage</code>.
+        </li>
+        <li><code>queued</code>, <code>branded</code> and <code>remaining</code> (what is left of today's quota).</li>
+      </ul>
+    </dd>
+  </dl>
+  <h3>Details</h3>
+  <p>
+    A text that does not go out raises an error that a <b>Catch</b> node can handle: a wrong key (401), a key that may not
+    do this (403), a number SMSTunnel cannot read (400). When several numbers are given, each failure is reported with
+    its own <code>msg.to</code> and <code>msg.smstunnel.error</code> (<code>status</code>, <code>code</code>,
+    <code>message</code>), and the other numbers still get their text.
+  </p>
+  <p>
+    SMSTunnel allows 30 sends a minute. The node sends one text at a time for each account, and when SMSTunnel asks it to
+    slow down (429) it waits and tries once more.
+  </p>
+  <p>Send only texts people expect from you: alerts to yourself, reminders, sign-in codes, order updates.</p>
+  <h3>References</h3>
+  <ul>
+    <li><a href="https://smstunnel.io" target="_blank" rel="noopener">SMSTunnel</a></li>
+    <li><a href="https://play.google.com/store/apps/details?id=io.smstunnel.app" target="_blank" rel="noopener">The SMSTunnel app on Google Play</a></li>
+  </ul>
+</script>
+
+<script type="text/html" data-help-name="smstunnel-code">
+  <p>Sends a sign-in or verification code from your own Android phone, from your own number.</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">string</span></dt>
+    <dd>
+      The text with the code, up to 320 characters. It must contain the code, 4 to 10 digits standing on their own (or
+      <code>123-456</code>), such as <code>Your sign-in code is 482913</code>; SMSTunnel refuses a text without one.
+    </dd>
+    <dt>to <span class="property-type">string</span></dt>
+    <dd>One number, in international format, such as <code>"+14155550123"</code>.</dd>
+    <dt class="optional">deviceId <span class="property-type">string</span></dt>
+    <dd>Sends through this phone instead of the one set in the node or the account.</dd>
+    <dt class="optional">defaultCountryCode <span class="property-type">string</span></dt>
+    <dd>Such as <code>"+40"</code>: completes a number written without <code>+</code> or <code>00</code>.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>
+      <code>messageId</code>, <code>to</code>, <code>status</code> (<code>queued</code>, <code>pending</code>, or with
+      <b>Wait</b> <code>sent</code>, <code>delivered</code>, <code>failed</code>), <code>queued</code> and
+      <code>remaining</code>. The text itself is left out, so the code doesn't end up in logs.
+    </dd>
+  </dl>
+  <h3>Details</h3>
+  <p>
+    Codes count against a separate quota from other texts. Make the code in your flow (for example in a
+    <b>function</b> node with <code>crypto.randomInt</code>), keep it on the server with an expiry, and compare what the
+    person types with it there. Errors go to a <b>Catch</b> node, as with <b>SMSTunnel send</b>.
+  </p>
+</script>
+
+<script type="text/html" data-help-name="smstunnel-received">
+  <p>Outputs the texts your phone receives, as they arrive. It asks SMSTunnel for new texts every few seconds.</p>
+  <h3>Inputs</h3>
+  <p>Any message makes it check right away (an <b>inject</b> node, for example). It also checks on its own.</p>
+  <h3>Outputs</h3>
+  <p>One message for each new text, oldest first.</p>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">string | null</span></dt>
+    <dd>The words. <code>null</code> when the phone synced the text encrypted.</dd>
+    <dt>from <span class="property-type">string</span></dt>
+    <dd>The number that sent it (also in <code>msg.topic</code>).</dd>
+    <dt>smstunnel <span class="property-type">object</span></dt>
+    <dd>
+      <code>id</code>, <code>sender</code>, <code>message</code>, <code>receivedAt</code>, <code>deviceId</code>,
+      <code>deviceName</code>, <code>simSlot</code>, <code>isEncrypted</code>.
+    </dd>
+  </dl>
+  <h3>Details</h3>
+  <p>
+    It needs a key you allowed to read received texts: <b>Can also read received texts</b> when you create it, or
+    <b>Allow reading received texts</b> later, under <b>Apps</b> in the dashboard. Syncing is off by default in the
+    SMSTunnel app; once you turn it on, only texts that arrive from then on are synced, and the phone's older messages are
+    never read.
+  </p>
+  <p>
+    <b>Phone ID</b> and <b>From</b> narrow it to one of your phones and one sender. <b>On start</b> chooses whether the
+    texts already on the account when the flow starts are output too. After a redeploy, the node carries on where it
+    stopped.
+  </p>
+  <p>To answer a text, set <code>msg.to</code> to <code>msg.from</code> in a <b>change</b> node and wire it to <b>SMSTunnel send</b>.</p>
+</script>

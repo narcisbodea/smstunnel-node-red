@@ -1,0 +1,74 @@
+{
+  "smstunnel": {
+    "paletteLabel": {
+      "account": "SMSTunnel account",
+      "send": "send",
+      "code": "code",
+      "received": "received"
+    },
+    "label": {
+      "name": "Name",
+      "account": "Account",
+      "apiKey": "API key",
+      "deviceId": "Phone ID",
+      "countryCode": "Country code",
+      "to": "To",
+      "message": "Text",
+      "wait": "Wait",
+      "interval": "Check every",
+      "seconds": "seconds",
+      "from": "From",
+      "startWith": "On start"
+    },
+    "placeholder": {
+      "accountName": "My SMSTunnel account",
+      "deviceIdAccount": "optional: the phone to send from",
+      "deviceIdNode": "the account's phone",
+      "deviceIdReceived": "every phone of the account",
+      "countryCode": "optional, e.g. +40",
+      "from": "every sender"
+    },
+    "option": {
+      "wait": "until the phone has sent it (up to 60 seconds)",
+      "startNew": "only texts that arrive from now on",
+      "startLatest": "also the last 20 texts already there"
+    },
+    "tip": {
+      "account": "Create the key in your SMSTunnel dashboard under <b>Apps → Add an app</b>. The phone ID is under <b>Phones</b>, with a Copy button; leave it empty to let SMSTunnel pick one of your phones.",
+      "countryCode": "Completes numbers written without + or 00. Numbers in international format (+14155550123) need nothing.",
+      "send": "One text per number. Several numbers in <code>msg.to</code> (comma or new line between them, or an array) get one text each, at most 30.",
+      "code": "The text must contain the code: 4 to 10 digits standing on their own, such as <code>Your code is 482913</code>.",
+      "received": "Needs a key allowed to read received texts (<b>Can also read received texts</b>) and syncing turned on in the SMSTunnel app."
+    },
+    "status": {
+      "sending": "sending…",
+      "waiting": "waiting for the phone…",
+      "sent": "sent to __to__",
+      "sentMany": "sent __count__ texts",
+      "sentSome": "sent __sent__ of __count__",
+      "queued": "queued: the phone is offline",
+      "failed": "the phone could not send it",
+      "invalidKey": "invalid API key",
+      "notAllowed": "not allowed for this key",
+      "rateLimited": "too many requests, waiting",
+      "unreachable": "can't reach SMSTunnel",
+      "noAccount": "no account",
+      "noKey": "no API key",
+      "starting": "starting…",
+      "watching": "watching",
+      "received": "__count__ new"
+    },
+    "error": {
+      "noAccount": "Choose an SMSTunnel account in this node.",
+      "noKey": "The SMSTunnel account has no API key. Create one in your SMSTunnel dashboard under Apps → Add an app.",
+      "noText": "The text is empty. Put it in msg.payload, or set Text in the node.",
+      "noRecipient": "No number to text. Put it in msg.to, or set To in the node.",
+      "oneNumber": "A sign-in code goes to one number. msg.to has several.",
+      "tooMany": "At most __max__ numbers per message: SMSTunnel sends up to 30 texts a minute. Split the list.",
+      "forNumber": "Could not text __number__: __reason__",
+      "stopped": "No text went to the __count__ numbers after it.",
+      "noStatus": "This API key can't look up statuses (sms:read), so the node doesn't wait for the phone.",
+      "inbox": "This API key may not read received texts. In your SMSTunnel dashboard, open Apps and choose Allow reading received texts for this app (or create a key with Can also read received texts)."
+    }
+  }
+}
