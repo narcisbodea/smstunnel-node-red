@@ -2,6 +2,7 @@
 
 const { createClient, SmsTunnelError } = require('./lib/client');
 const { MAX_RECIPIENTS, RecipientError, maskNumber, parseRecipients } = require('./lib/recipients');
+const { SendAtError, isSet, sendAtOf } = require('./lib/send-at');
 const { version } = require('../package.json');
 
 const USER_AGENT = `smstunnel-node-red/${version} Node.js/${process.versions.node}`;
@@ -140,6 +141,10 @@ module.exports = function (RED) {
       if (!account) throw new Error(t('error.noAccount'));
       if (!account.client) throw new Error(account.setupError);
 
+      // Scheduled texts, SMSTunnel send only: msg.sendAt sends it later, msg.cancel cancels one instead of sending.
+      if (kind === 'code' && (isSet(msg.sendAt) || isSet(msg.cancel))) throw new Error(t('error.codeNotScheduled'));
+      if (isSet(msg.cancel)) return cancel(msg, send, signal);
+
       let words = await evaluate(node, msg, config.message, config.messageType || 'msg');
       if (typeof words === 'number') words = String(words);
       if (typeof words !== 'string' || !words.trim()) throw new Error(t('error.noText'));
@@ -154,9 +159,19 @@ module.exports = function (RED) {
       if (kind === 'code' && numbers.length > 1) throw new Error(t('error.oneNumber'));
       if (numbers.length > MAX_RECIPIENTS) throw new Error(t('error.tooMany', { max: MAX_RECIPIENTS }));
 
+      let sendAt;
+      if (isSet(msg.sendAt)) {
+        try {
+          sendAt = sendAtOf(msg.sendAt);
+        } catch (error) {
+          throw error instanceof SendAtError ? new Error(error.message) : error;
+        }
+      }
+
       const extra = {
         deviceId: text(msg.deviceId) || text(config.deviceId) || account.deviceId,
         defaultCountryCode: text(msg.defaultCountryCode) || account.defaultCountryCode,
+        ...(sendAt ? { sendAt } : {}),
       };
 
       node.status({ fill: 'blue', shape: 'dot', text: 'smstunnel.status.sending' });
@@ -169,8 +184,12 @@ module.exports = function (RED) {
         out.to = number;
         try {
           const answer = await account.schedule(() => sendOnce(account.client, number, words, extra, signal));
-          const result = resultOf(answer, number, kind === 'send' ? words : undefined);
-          if (config.wait && !result.queued) await waitForPhone(account.client, result, signal);
+          const result =
+            answer && answer.scheduled === true
+              ? scheduledOf(answer, number, kind === 'send' ? words : undefined)
+              : resultOf(answer, number, kind === 'send' ? words : undefined);
+          // A scheduled text goes out later: there is nothing to wait for now.
+          if (config.wait && !result.queued && !result.scheduled) await waitForPhone(account.client, result, signal);
           out.payload = result;
           if (result.queued) queued += 1;
           if (result.status === 'failed' || result.status === 'unconfirmed') failed += 1;
@@ -205,7 +224,18 @@ module.exports = function (RED) {
           text:
             numbers.length === 1
               ? 'smstunnel.status.failed'
-              : t('status.sentSome', { sent: delivered, count: numbers.length }),
+              : sendAt
+                ? t('status.scheduledSome', { sent: delivered, count: numbers.length })
+                : t('status.sentSome', { sent: delivered, count: numbers.length }),
+        });
+      } else if (sendAt) {
+        node.status({
+          fill: 'green',
+          shape: 'ring',
+          text:
+            numbers.length === 1
+              ? t('status.scheduled', { to: maskNumber(numbers[0]) })
+              : t('status.scheduledMany', { count: delivered }),
         });
       } else if (queued > 0) {
         node.status({ fill: 'yellow', shape: 'ring', text: 'smstunnel.status.queued' });
@@ -221,10 +251,16 @@ module.exports = function (RED) {
       }
     }
 
-    /** One send, and one retry after a 429 (SMSTunnel says how long to wait). */
-    async function sendOnce(client, number, words, extra, signal) {
-      const call = () =>
-        kind === 'code' ? client.sendVerificationCode(number, words, extra) : client.sendSms(number, words, extra);
+    /** One send, and one retry after a 429. */
+    function sendOnce(client, number, words, extra, signal) {
+      return retryOnce(
+        () => (kind === 'code' ? client.sendVerificationCode(number, words, extra) : client.sendSms(number, words, extra)),
+        signal,
+      );
+    }
+
+    /** One call, and one retry after a 429 (SMSTunnel says how long to wait; a 429 means nothing was done). */
+    async function retryOnce(call, signal) {
       try {
         return await call();
       } catch (error) {
@@ -234,6 +270,23 @@ module.exports = function (RED) {
         await sleep(seconds * 1000, signal);
         return call();
       }
+    }
+
+    /** msg.cancel: cancels the scheduled text with that id instead of sending one, and outputs it as msg.payload. */
+    async function cancel(msg, send, signal) {
+      const id = typeof msg.cancel === 'string' ? msg.cancel.trim() : '';
+      if (!id) throw new Error(t('error.cancelId'));
+      node.status({ fill: 'blue', shape: 'dot', text: 'smstunnel.status.canceling' });
+      let answer;
+      try {
+        answer = await account.schedule(() => retryOnce(() => account.client.cancelScheduled(id, signal), signal));
+      } catch (error) {
+        if (signal.aborted) return;
+        throw new Error(explain(error), { cause: error });
+      }
+      msg.payload = scheduledTextOf(answer && answer.data, id);
+      node.status({ fill: 'green', shape: 'dot', text: 'smstunnel.status.canceled' });
+      send(msg);
     }
 
     /** Asks for the status until the phone has sent the text (or it failed), for up to a minute. */
@@ -276,6 +329,30 @@ module.exports = function (RED) {
     };
     if (words !== undefined) result.message = words;
     if (data.remaining) result.remaining = data.remaining;
+    return result;
+  }
+
+  /** A send with msg.sendAt: SMSTunnel keeps the text and sends it at `sendAt` (UTC). */
+  function scheduledOf(answer, to, words) {
+    const data = answer.data || {};
+    const result = {
+      scheduledId: answer.scheduledId || data.id,
+      to,
+      status: 'scheduled',
+      scheduled: true,
+      sendAt: answer.sendAt || data.sendAt,
+    };
+    if (words !== undefined) result.message = words;
+    return result;
+  }
+
+  /** A scheduled text as SMSTunnel answers it (a canceled one, for msg.cancel), with its id as `scheduledId`. */
+  function scheduledTextOf(item, id) {
+    const data = item || {};
+    const result = { scheduledId: data.id || id, to: data.to, status: data.status, sendAt: data.sendAt, message: data.message };
+    for (const name of ['deviceId', 'messageId', 'error']) {
+      if (data[name] !== undefined && data[name] !== null) result[name] = data[name];
+    }
     return result;
   }
 

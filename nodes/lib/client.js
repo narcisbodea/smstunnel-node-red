@@ -4,8 +4,10 @@
  * A small client for the SMSTunnel API, with no dependencies (Node.js 18+ has fetch).
  *
  * Every call resolves with the decoded answer, or rejects with an SmsTunnelError that carries the HTTP status,
- * SMSTunnel's error code (e.g. PERMISSION_REQUIRED) and, for a 429, the seconds to wait.
+ * SMSTunnel's error code (e.g. PERMISSION_REQUIRED, SCHEDULE_TOO_SOON) and, for a 429, the seconds to wait.
  */
+
+const { sendAtOf } = require('./send-at');
 
 const DEFAULT_SERVER_URL = 'https://smstunnel.io';
 const SERVER_URL = /^https?:\/\/[^/\s?#]+(\/[^\s?#]*)?$/i;
@@ -149,12 +151,51 @@ function createClient(options) {
     return body;
   }
 
+  /** The path of one scheduled text. An empty id would name the list, so it is refused. */
+  function scheduledPath(id) {
+    const text = typeof id === 'string' ? id.trim() : '';
+    if (!text) throw new Error('A scheduled text ID is required (the scheduledId of a scheduled send).');
+    return `/api/v1/sms/scheduled/${encodeURIComponent(text)}`;
+  }
+
   return {
     serverUrl,
 
-    /** POST /api/v1/sms/send: one text to one number. */
-    sendSms(to, message, extra) {
-      return request('POST', '/api/v1/sms/send', sendBody(to, message, extra));
+    /**
+     * POST /api/v1/sms/send: one text to one number. With `extra.sendAt` (a Date, or an ISO 8601 string with its
+     * offset; see send-at.js), SMSTunnel keeps it and sends it then: the answer is
+     * `{ success, scheduled: true, scheduledId, sendAt, data }`.
+     */
+    async sendSms(to, message, extra = {}) {
+      const body = sendBody(to, message, extra);
+      if (extra.sendAt !== undefined && extra.sendAt !== null && extra.sendAt !== '') body.sendAt = sendAtOf(extra.sendAt);
+      return request('POST', '/api/v1/sms/send', body);
+    },
+
+    /**
+     * GET /api/v1/sms/scheduled (needs sms:read): the texts this key scheduled, waiting ones soonest first, or with
+     * `{ scope: 'done' }` the ones that went out, failed or were canceled. `data`: `{ items, total, page, limit,
+     * waiting, max }`.
+     * @param {{scope?: 'waiting' | 'done', page?: number, limit?: number}} [params]
+     */
+    listScheduled(params = {}, signal) {
+      const query = new URLSearchParams();
+      for (const name of ['scope', 'page', 'limit']) {
+        const value = params[name];
+        if (value !== undefined && value !== null && String(value).trim() !== '') query.set(name, String(value).trim());
+      }
+      const qs = query.toString();
+      return request('GET', `/api/v1/sms/scheduled${qs ? `?${qs}` : ''}`, undefined, signal);
+    },
+
+    /** GET /api/v1/sms/scheduled/:id (needs sms:read); 404 SCHEDULE_NOT_FOUND for another key's text. */
+    async getScheduled(id, signal) {
+      return request('GET', scheduledPath(id), undefined, signal);
+    },
+
+    /** DELETE /api/v1/sms/scheduled/:id (needs sms:send): cancels it while it waits; 409 SCHEDULE_NOT_EDITABLE after. */
+    async cancelScheduled(id, signal) {
+      return request('DELETE', scheduledPath(id), undefined, signal);
     },
 
     /** POST /api/v1/sms/send-2fa: a sign-in code (the text must contain 4 to 10 digits). */

@@ -264,6 +264,139 @@ describe('SMSTunnel nodes', function () {
       api.requests.length.should.equal(1);
     });
 
+    describe('scheduled texts', function () {
+      function scheduled(request) {
+        const { to, message, sendAt } = request.body;
+        return {
+          status: 200,
+          body: {
+            success: true,
+            scheduled: true,
+            scheduledId: `s-${to}`,
+            sendAt,
+            data: { id: `s-${to}`, to, message, sendAt, status: 'scheduled', deviceId: null, messageId: null, error: null },
+          },
+        };
+      }
+
+      it('with msg.sendAt, schedules the text and outputs it, without waiting for the phone', async function () {
+        api.handler = scheduled;
+        const { node, out } = await load([account(), sender('smstunnel-send', { wait: true })]);
+        const output = collect(out, 'input', 1);
+        const status = new Promise((resolve) => node.on('call:status', (call) => call.args[0].fill === 'green' && resolve(call.args[0])));
+
+        node.receive({ payload: 'Reminder: tomorrow at 10:30.', to: '+14155550123', sendAt: '2026-11-16T09:00:00+02:00' });
+        const [msg] = await output;
+
+        api.requests.length.should.equal(1, 'Wait does not ask for the status of a scheduled text');
+        api.requests[0].body.should.eql({ to: '+14155550123', message: 'Reminder: tomorrow at 10:30.', sendAt: '2026-11-16T07:00:00.000Z' });
+        msg.payload.should.eql({
+          scheduledId: 's-+14155550123',
+          to: '+14155550123',
+          status: 'scheduled',
+          scheduled: true,
+          sendAt: '2026-11-16T07:00:00.000Z',
+          message: 'Reminder: tomorrow at 10:30.',
+        });
+        (await status).should.eql({ fill: 'green', shape: 'ring', text: 'smstunnel.status.scheduled' });
+      });
+
+      it('schedules one text for each number, from a Date', async function () {
+        api.handler = scheduled;
+        const { node, out } = await load([account(), sender('smstunnel-send')]);
+        const output = collect(out, 'input', 2);
+        const status = new Promise((resolve) => node.on('call:status', (call) => call.args[0].fill === 'green' && resolve(call.args[0])));
+
+        node.receive({ payload: 'Meeting moved to 3 pm', to: '+14155550123, +14155550124', sendAt: new Date('2026-11-16T13:00:00Z') });
+        const messages = await output;
+
+        api.requests.map((request) => [request.body.to, request.body.sendAt]).should.eql([
+          ['+14155550123', '2026-11-16T13:00:00.000Z'],
+          ['+14155550124', '2026-11-16T13:00:00.000Z'],
+        ]);
+        messages.map((msg) => msg.payload.scheduledId).should.eql(['s-+14155550123', 's-+14155550124']);
+        (await status).text.should.equal('smstunnel.status.scheduledMany');
+      });
+
+      for (const [title, sendAt, words] of [
+        ['without its offset', '2026-11-16T09:00:00', /has no offset/],
+        ['that is not a real date', '2026-02-30T09:00:00Z', /not a real date and time/],
+        ['given as a number', 1794812400000, /new Date\(ms\)/],
+      ]) {
+        it(`refuses a msg.sendAt ${title} before sending anything`, async function () {
+          const { node } = await load([account(), sender('smstunnel-send')]);
+          const error = nextError(node);
+
+          node.receive({ payload: 'Hi', to: '+14155550123, +14155550124', sendAt });
+          const call = await error;
+
+          String(call.args[0].message).should.match(words);
+          api.requests.length.should.equal(0);
+        });
+      }
+
+      it('passes on a refusal with its status and code', async function () {
+        api.handler = () => ({
+          status: 400,
+          body: { statusCode: 400, error: 'Bad Request', code: 'SCHEDULE_TOO_SOON', message: 'Pick a time at least a minute from now. To send it now, use Send.' },
+        });
+        const { node } = await load([account(), sender('smstunnel-send')]);
+        const error = nextError(node);
+
+        node.receive({ payload: 'Hi', to: '+14155550123', sendAt: '2026-11-15T10:00:00Z' });
+
+        (await error).args[0].message.should.equal('Pick a time at least a minute from now. To send it now, use Send. (400 SCHEDULE_TOO_SOON)');
+      });
+
+      it('with msg.cancel, cancels the scheduled text instead of sending one', async function () {
+        api.handler = () => ({
+          status: 200,
+          body: {
+            success: true,
+            data: { id: 's1', to: '+14155550123', message: 'Reminder', sendAt: '2026-11-16T07:00:00.000Z', status: 'canceled', deviceId: null, messageId: null, error: null },
+          },
+        });
+        const { node, out } = await load([account(), sender('smstunnel-send')]);
+        const output = collect(out, 'input', 1);
+        const status = new Promise((resolve) => node.on('call:status', (call) => call.args[0].fill === 'green' && resolve(call.args[0])));
+
+        node.receive({ payload: 'not sent', to: '+14155550199', cancel: ' s1 ' });
+        const [msg] = await output;
+
+        api.requests.length.should.equal(1);
+        api.requests[0].method.should.equal('DELETE');
+        api.requests[0].path.should.equal('/api/v1/sms/scheduled/s1');
+        should(api.requests[0].body).be.undefined();
+        msg.payload.should.eql({ scheduledId: 's1', to: '+14155550123', status: 'canceled', sendAt: '2026-11-16T07:00:00.000Z', message: 'Reminder' });
+        (await status).text.should.equal('smstunnel.status.canceled');
+      });
+
+      it('reports a text that can no longer be canceled to Catch nodes, with its code', async function () {
+        api.handler = () => ({
+          status: 409,
+          body: { statusCode: 409, error: 'Conflict', code: 'SCHEDULE_NOT_EDITABLE', message: 'This text has already gone out or was canceled.' },
+        });
+        const { node } = await load([account(), sender('smstunnel-send')]);
+        const error = nextError(node);
+
+        node.receive({ cancel: 's1' });
+        const call = await error;
+
+        call.args[0].message.should.equal('This text has already gone out or was canceled. (409 SCHEDULE_NOT_EDITABLE)');
+        call.args[0].cause.code.should.equal('SCHEDULE_NOT_EDITABLE');
+      });
+
+      it('refuses a msg.cancel that is not an ID', async function () {
+        const { node } = await load([account(), sender('smstunnel-send')]);
+        const error = nextError(node);
+
+        node.receive({ cancel: 42 });
+
+        (await error).args[0].message.should.equal('smstunnel.error.cancelId');
+        api.requests.length.should.equal(0);
+      });
+    });
+
     it('says so when the account has no API key', async function () {
       const { node } = await load([account(), sender('smstunnel-send')], {});
       const error = nextError(node);
@@ -319,6 +452,17 @@ describe('SMSTunnel nodes', function () {
       const call = await error;
 
       call.args[0].message.should.equal('smstunnel.error.oneNumber');
+      api.requests.length.should.equal(0);
+    });
+
+    it('refuses msg.sendAt and msg.cancel: codes are never scheduled', async function () {
+      const { node } = await load([account(), sender('smstunnel-code')]);
+
+      for (const extra of [{ sendAt: '2026-11-16T09:00:00Z' }, { cancel: 's1' }]) {
+        const error = nextError(node);
+        node.receive({ payload: 'Your sign-in code is 482913', to: '+14155550123', ...extra });
+        (await error).args[0].message.should.equal('smstunnel.error.codeNotScheduled');
+      }
       api.requests.length.should.equal(0);
     });
 

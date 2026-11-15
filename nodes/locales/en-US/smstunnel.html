@@ -43,6 +43,17 @@
     <dd>Sends through this phone instead of the one set in the node or the account.</dd>
     <dt class="optional">defaultCountryCode <span class="property-type">string</span></dt>
     <dd>Such as <code>"+40"</code>: completes numbers written without <code>+</code> or <code>00</code>, instead of the account's.</dd>
+    <dt class="optional">sendAt <span class="property-type">Date | string</span></dt>
+    <dd>
+      Sends the text later instead of now, 1 minute to 30 days ahead: a Date, or an ISO 8601 time with its offset, such
+      as <code>"2026-11-16T09:00:00+02:00"</code>. A time without an offset is refused, so it is never read in the wrong
+      time zone.
+    </dd>
+    <dt class="optional">cancel <span class="property-type">string</span></dt>
+    <dd>
+      The <code>scheduledId</code> of a scheduled text: cancels it before it goes out. The message then sends nothing,
+      and its <code>payload</code> becomes the canceled text.
+    </dd>
   </dl>
   <h3>Outputs</h3>
   <p>One message for each text, with <code>msg.to</code> set to its number.</p>
@@ -58,6 +69,10 @@
           <code>unconfirmed</code> (handed to the SIM, no confirmation), with <code>sentAt</code> and <code>errorMessage</code>.
         </li>
         <li><code>queued</code>, <code>branded</code> and <code>remaining</code> (what is left of today's quota).</li>
+        <li>
+          With <code>msg.sendAt</code>: <code>scheduledId</code>, <code>to</code>, <code>message</code>,
+          <code>status: "scheduled"</code>, <code>scheduled: true</code> and <code>sendAt</code> (in UTC) instead.
+        </li>
       </ul>
     </dd>
   </dl>
@@ -67,6 +82,13 @@
     do this (403), a number SMSTunnel cannot read (400). When several numbers are given, each failure is reported with
     its own <code>msg.to</code> and <code>msg.smstunnel.error</code> (<code>status</code>, <code>code</code>,
     <code>message</code>), and the other numbers still get their text.
+  </p>
+  <p>
+    A scheduled text goes out at <code>msg.sendAt</code> exactly as if the flow had sent it then, with the same key; if
+    the phone is offline then, it waits for it, up to 3 days. <b>Wait</b> doesn't apply to it. Your plan caps how many
+    texts wait at once (Free 10, up to 1000 on Enterprise); past that, SMSTunnel answers 403
+    <code>SCHEDULE_LIMIT_REACHED</code>. A text that already went out can't be canceled (409
+    <code>SCHEDULE_NOT_EDITABLE</code>).
   </p>
   <p>
     SMSTunnel allows 30 sends a minute. The node sends one text at a time for each account, and when SMSTunnel asks it to
@@ -111,6 +133,7 @@
     <b>function</b> node with <code>crypto.randomInt</code>), keep it on the server with an expiry, and compare what the
     person types with it there. Errors go to a <b>Catch</b> node, as with <b>SMSTunnel send</b>.
   </p>
+  <p>Codes are never scheduled: a message with <code>msg.sendAt</code> or <code>msg.cancel</code> is refused.</p>
 </script>
 
 <script type="text/html" data-help-name="smstunnel-received">
