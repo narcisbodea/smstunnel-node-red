@@ -1,6 +1,6 @@
 {
   "name": "@narcisbodea/smstunnel-node-red",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Node-RED nodes for SMSTunnel: send texts and sign-in codes from your own Android phone, from your own number, and get the texts it receives.",
   "keywords": [
     "node-red",

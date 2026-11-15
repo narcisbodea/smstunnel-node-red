@@ -48,6 +48,8 @@ Sends `msg.payload` to `msg.to`, one text per number.
 | `msg.to` | The number in international format, `"+14155550123"`. Several numbers (commas or new lines between them, or an array) get one text each, at most 30 per message. A number must be text: as a JavaScript number it loses its `+`, so the node refuses it. |
 | `msg.deviceId` | Optional: send through this phone. |
 | `msg.defaultCountryCode` | Optional: overrides the account's country code. |
+| `msg.sendAt` | Optional: send it later, at this time (a Date, or `"2026-11-16T09:00:00+02:00"`). See [Scheduled texts](#scheduled-texts). |
+| `msg.cancel` | Optional: the `scheduledId` of a scheduled text to cancel; the message then sends nothing. |
 
 **To** and **Text** in the node can take the number and the text from elsewhere: a fixed value, flow or global context, an environment variable, or a JSONata expression.
 
@@ -66,6 +68,25 @@ For each text, the node outputs a message with `msg.to` set to its number and `m
 ```
 
 `status` is `queued` when the phone is offline: the text waits on your account and goes out when the phone is back. With **Wait** ticked, the node waits up to a minute for the phone, and `status` becomes `sent`, `delivered`, `failed` or `unconfirmed` (handed to the SIM, without a confirmation), with `sentAt` and `errorMessage`.
+
+### Scheduled texts
+
+Set `msg.sendAt` and SMSTunnel keeps the text and hands it to your phone at that time, 1 minute to 30 days ahead, exactly as if the flow had sent it then (the same key, phone and country code, and that day's allowance). If the phone is offline then, the text waits for it, up to 3 days. For example, for a reminder a day before an appointment whose ISO time is in `msg.appointment`, a **change** node sets `msg.sendAt` to the JSONata `$fromMillis($toMillis(appointment) - 86400000)`. The output is then:
+
+```json
+{
+  "scheduledId": "6735a0c4e1d9e1b7b54cf994",
+  "to": "+14155550123",
+  "status": "scheduled",
+  "scheduled": true,
+  "sendAt": "2026-11-16T07:00:00.000Z",
+  "message": "Reminder: your appointment is tomorrow at 10:00."
+}
+```
+
+- `msg.sendAt` is a Date (also one made in a function node) or an ISO 8601 time with its offset. A time without an offset, a number, or a date that doesn't exist is refused before anything is sent, so a text never goes out at a time read in the wrong time zone. **Wait** doesn't apply to a scheduled text.
+- To cancel it before it goes out, send a message with `msg.cancel` set to its `scheduledId`: the node outputs the canceled text. A text that already went out can't be canceled (409 `SCHEDULE_NOT_EDITABLE`).
+- Texts waiting at once, per plan: Free 10, Starter 50, Standard 200, Professional 500, Enterprise 1000 (403 `SCHEDULE_LIMIT_REACHED` past that). Your dashboard shows them all under **Messages → Scheduled**. Sign-in codes are never scheduled.
 
 ### SMSTunnel code
 
@@ -124,7 +145,7 @@ Build a Node-RED flow (JSON I can import) that sends texts with SMSTunnel. SMSTu
 
 I installed the palette module @narcisbodea/smstunnel-node-red. Its nodes:
 - smstunnel-account (config node): name, deviceId (optional phone), defaultCountryCode (e.g. "+40", completes numbers written without + or 00). The API key is a credential I paste in the editor; leave it out of the JSON.
-- smstunnel-send: account, to/toType (default msg.to), message/messageType (default msg.payload), deviceId, wait (true waits up to 60 s for the phone). One text per number; several numbers in msg.to (comma separated or an array, at most 30) get one text each. Output per text: msg.payload = { messageId, to, status: "queued" | "pending" | "sent" | "delivered" | "failed", queued, ... }.
+- smstunnel-send: account, to/toType (default msg.to), message/messageType (default msg.payload), deviceId, wait (true waits up to 60 s for the phone). One text per number; several numbers in msg.to (comma separated or an array, at most 30) get one text each. Output per text: msg.payload = { messageId, to, status: "queued" | "pending" | "sent" | "delivered" | "failed", queued, ... }. msg.sendAt (a Date or an ISO time with its offset, 1 minute to 30 days ahead) schedules it instead: msg.payload = { scheduledId, to, status: "scheduled", scheduled: true, sendAt }; a message with msg.cancel = that scheduledId cancels it.
 - smstunnel-code: like send, for sign-in codes only, to one number. The text must contain a code of 4 to 10 digits standing on its own (e.g. 482913 or 123-456), at most 320 characters.
 - smstunnel-received: account, interval (seconds, at least 10), deviceId, phone, startWith ("new" or "latest"). Outputs msg.payload (the words), msg.from (the sender), msg.smstunnel. The key needs the "Can also read received texts" opt-in.
 Behind them is the SMSTunnel API: POST https://smstunnel.io/api/v1/sms/send with the header X-API-Key and {"to", "message", "deviceId"?, "defaultCountryCode"?}, one recipient per call, 30 send requests a minute, 1600 characters a text. Errors reach Catch nodes: 401 bad key, 403 missing permission or plan (code such as PERMISSION_REQUIRED), 429 too many requests, 5xx SMSTunnel problem. If the phone is offline, the text waits on the account (status "queued") and goes out when the phone is back.
